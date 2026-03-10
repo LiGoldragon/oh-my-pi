@@ -89,23 +89,36 @@ function getAvailableModels(): string[] {
  * Resolve a fuzzy model pattern to an actual model name.
  * Supports comma-separated patterns (e.g., "gpt, opus").
  * Returns the first match found, or undefined if no match.
+ *
+ * Important: provider-qualified model IDs like `openai-codex/gpt-5.1-codex-mini`
+ * must pass through unchanged. `pi --list-models` exposes provider and model in
+ * separate columns, so fuzzy matching against the bare model column would
+ * otherwise silently drop the override.
  */
 function resolveModelPattern(pattern: string, availableModels?: string[]): string | undefined {
    if (!pattern || pattern === 'default') return undefined
 
+   const rawPatterns = pattern
+      .split(',')
+      .map(p => p.trim())
+      .filter(Boolean)
+
+   // Preserve explicit provider/model selections exactly.
+   const qualified = rawPatterns.find(p => p.includes('/'))
+   if (qualified) return qualified
+
    const models = availableModels ?? getAvailableModels()
    if (models.length === 0) {
       // Fallback: return pattern as-is if we can't get available models
-      return pattern
+      return rawPatterns[0]
    }
 
-   // Split by comma, try each pattern in order
-   const patterns = pattern
-      .split(',')
-      .map(p => p.trim().toLowerCase())
-      .filter(Boolean)
+   const normalizedPatterns = rawPatterns.map(p => p.toLowerCase())
 
-   for (const p of patterns) {
+   for (const p of normalizedPatterns) {
+      const exact = models.find(m => m.toLowerCase() === p)
+      if (exact) return exact
+
       const match = models.find(m => m.toLowerCase().includes(p))
       if (match) return match
    }
